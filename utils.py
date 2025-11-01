@@ -102,7 +102,7 @@ def generate_response_node(state: GraphState) -> Dict:
     context = state.get("context", "")
     chat_history = state.get("chat_history", [])
 
-    llm = ChatGroq(model_name=os.environ.get("GROQ_MODEL", "llama-3.1-70b-versatile"))
+    llm = ChatGroq(model_name=os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant"))
 
     # Build message chain using proper LangChain message objects
     messages = [SystemMessage(content=(
