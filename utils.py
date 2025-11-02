@@ -2,28 +2,31 @@ import os
 import tempfile
 from typing import List, Dict, TypedDict
 
-from langchain.schema import Document, SystemMessage, HumanMessage, AIMessage
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import LanceDB
-import lancedb
+# Updated imports for LangChain v0.3+
+from langchain_core.documents import Document
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from langgraph.graph import END, StateGraph
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import LanceDB
+from langchain_huggingface import HuggingFaceEmbeddings
+
+import lancedb
+from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
 
 
 # -------------------------
-# PDF loader
+# PDF Loader
 # -------------------------
 def load_pdf(uploaded_file) -> List[Document]:
     """
-    Loads a PDF file and returns a list of LangChain Document objects.
-    Works with file-like objects (e.g., Streamlit UploadedFile or local files).
+    Loads a PDF file from Streamlit uploader and converts it into LangChain Document objects.
     """
     if uploaded_file is None:
         return []
 
+    # Save uploaded file to a temporary location
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(uploaded_file.getvalue())
         tmp_path = tmp.name
@@ -32,6 +35,7 @@ def load_pdf(uploaded_file) -> List[Document]:
         loader = PyPDFLoader(tmp_path)
         documents = loader.load()
     finally:
+        # Clean up the temporary file
         try:
             os.remove(tmp_path)
         except Exception:
@@ -41,18 +45,18 @@ def load_pdf(uploaded_file) -> List[Document]:
 
 
 # -------------------------
-# Text splitter
+# Text Splitter
 # -------------------------
 def split_text(docs: List[Document], chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Document]:
     """
-    Splits LangChain Document objects into smaller chunks for embedding.
+    Splits documents into manageable chunks for vector embeddings.
     """
     splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return splitter.split_documents(docs)
 
 
 # -------------------------
-# Create LanceDB vector DB
+# Vector Database (LanceDB)
 # -------------------------
 def create_vector_db(
     docs: List[Document],
@@ -60,22 +64,25 @@ def create_vector_db(
     table_name: str = "fitness_capstone",
 ):
     """
-    Create (or open) a LanceDB-backed LangChain vectorstore from documents.
+    Creates or loads a LanceDB vector database using the given documents.
     """
     if not docs:
         raise ValueError("No documents provided to create_vector_db.")
 
     embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+
+    # Ensure LanceDB directory exists
     lance_path = os.environ.get("LANCEDB_PATH", "/tmp/lancedb")
     os.makedirs(lance_path, exist_ok=True)
 
     conn = lancedb.connect(lance_path)
     db = LanceDB.from_documents(docs, embeddings, connection=conn, table_name=table_name)
+
     return db
 
 
 # -------------------------
-# LangGraph + Groq LLM RAG chain
+# Graph State Definition
 # -------------------------
 class GraphState(TypedDict):
     question: str
@@ -84,19 +91,23 @@ class GraphState(TypedDict):
     response: str
 
 
+# -------------------------
+# RAG Nodes
+# -------------------------
 def retrieve_context_node(state: GraphState, vector_db) -> Dict:
     """
-    Node that retrieves relevant passages from the vectorstore.
+    Retrieves the most relevant text chunks for the given user query from LanceDB.
     """
     question = state.get("question", "")
     docs = vector_db.similarity_search(question, k=4)
     context = "\n\n".join([getattr(d, "page_content", "") for d in docs])
+
     return {"context": context}
 
 
 def generate_response_node(state: GraphState) -> Dict:
     """
-    Node that calls Groq Chat LLM to generate an answer given question + context.
+    Uses Groq LLM to generate a response using the retrieved context.
     """
     question = state.get("question", "")
     context = state.get("context", "")
@@ -104,48 +115,47 @@ def generate_response_node(state: GraphState) -> Dict:
 
     llm = ChatGroq(model_name=os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant"))
 
-    # Build message chain using proper LangChain message objects
-    messages = [SystemMessage(content=(
-        "You are a friendly and encouraging Fitness Assistant. "
-        "Provide accurate answers based ONLY on the provided context. "
-        "If the answer is not in the context, say you cannot answer based on the document."
-    ))]
+    # System prompt
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a friendly and knowledgeable Fitness Assistant. "
+                "Answer questions strictly based on the provided context. "
+                "If the context doesn't contain the answer, say so clearly."
+            )
+        )
+    ]
 
-    # Convert chat_history (list of dicts) to proper message objects
+    # Add previous chat history
     for msg in chat_history:
-        role = msg.get("role")
-        content = msg.get("content", "")
+        role, content = msg.get("role"), msg.get("content", "")
         if role == "user":
             messages.append(HumanMessage(content=content))
         elif role == "assistant":
             messages.append(AIMessage(content=content))
 
-    # Append user message for this turn
-    user_content = f"Context:\n{context}\n\nQuestion:\n{question}"
-    messages.append(HumanMessage(content=user_content))
+    # Add the current user question and context
+    user_message = f"Context:\n{context}\n\nQuestion:\n{question}"
+    messages.append(HumanMessage(content=user_message))
 
-    # Call Groq LLM safely
+    # Generate response
     try:
         llm_response = llm.invoke(messages)
         text = getattr(llm_response, "content", None) or getattr(llm_response, "text", None) or str(llm_response)
-    except Exception:
-        try:
-            llm_response = llm(messages)
-            if isinstance(llm_response, str):
-                text = llm_response
-            else:
-                text = getattr(llm_response, "content", None) or str(llm_response)
-        except Exception as e:
-            text = f"Error generating response: {e}"
+    except Exception as e:
+        text = f"Error generating response: {e}"
 
     return {"response": text}
 
 
+# -------------------------
+# Build LangGraph Workflow
+# -------------------------
 def create_conversational_rag_chain(vector_db):
     """
-    Creates a LangGraph StateGraph with two nodes:
-      1) retrieve_context (vector search)
-      2) generate_response (Groq LLM)
+    Creates a LangGraph workflow with two steps:
+      1. Retrieve context from LanceDB
+      2. Generate response using Groq LLM
     """
     workflow = StateGraph(GraphState)
 
