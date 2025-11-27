@@ -8,6 +8,8 @@ langchain-community==0.2.10
 langgraph==0.0.63
 langchain-huggingface==0.0.3
 langchain-groq==0.1.6
+lancedb
+lance-namespace
 
 # Embeddings and model infra
 sentence-transformers>=2.6.0
@@ -15,4 +17,3 @@ transformers>=4.40.0
 torch>=2.2.0
 
 # Vector DB (pure-Python, no C++ build)
-lancedb>=0.6.0
