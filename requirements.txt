@@ -5,13 +5,13 @@ python-dotenv>=1.0.1
 # PDF handling
 pypdf==4.2.0
 
-# LangChain core + addons (v0.3+ compatible)
+# LangChain core + addons
 langchain==0.3.0
 langchain-core==0.3.0
 langchain-community==0.3.0
 langchain-huggingface==0.0.3
 langchain-groq==0.1.6
-langgraph==0.1.0
+langgraph==0.0.63
 langchain-text-splitters==0.3.0
 
 # Embeddings and model infra
@@ -21,3 +21,4 @@ torch>=2.2.0
 
 # Vector DB (pure-Python, FAISS)
 faiss-cpu
+
