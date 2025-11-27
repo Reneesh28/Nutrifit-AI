@@ -1,19 +1,23 @@
+# Streamlit
 streamlit==1.38.0
-pypdf==4.2.0
 python-dotenv>=1.0.1
 
-# LangChain core + addons
-langchain==0.2.11
-langchain-community==0.2.10
-langgraph==0.0.63
+# PDF handling
+pypdf==4.2.0
+
+# LangChain core + addons (v0.3+ compatible)
+langchain==0.3.0
+langchain-core==0.3.0
+langchain-community==0.3.0
 langchain-huggingface==0.0.3
 langchain-groq==0.1.6
-lancedb
-lance-namespace
+langgraph==0.1.0
+langchain-text-splitters==0.3.0
 
 # Embeddings and model infra
 sentence-transformers>=2.6.0
 transformers>=4.40.0
 torch>=2.2.0
 
-# Vector DB (pure-Python, no C++ build)
+# Vector DB (pure-Python, FAISS)
+faiss-cpu
